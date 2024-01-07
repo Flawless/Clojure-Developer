@@ -78,7 +78,7 @@
 
 ;; * java arrays
 (defn- aswap!
-  [a idx f]
+  [^longs a idx f]
   (->> (aget a idx)
        (f)
        (aset-int a idx)))
@@ -128,10 +128,10 @@
 
 ;; * task
 ;; Как можно оптимизировать данный код?
-(defn distance [point1 point2]
-  (let [[x1 y1] point1
-        [x2 y2] point2]
-    (Math/sqrt
-     (+
-      (Math/pow (- x2 x1) 2)
-      (Math/pow (- y2 y1) 2)))))
+(require '[clojure.math :as math])
+
+(defn distance ^double [^double x1 ^double y1 ^double x2 ^double y2]
+  (math/sqrt
+   (+
+    (math/pow (- x2 x1) 2)
+    (math/pow (- y2 y1) 2))))
