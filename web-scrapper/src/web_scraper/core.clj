@@ -20,6 +20,7 @@
    (let [request      (next-request scraper options)
          html         ^String (-> request http/request :body)
          page         (Jsoup/parse html)
+
          page-data    (extract-data scraper page)
          next-options (next-options scraper page options)]
      (cons page-data
