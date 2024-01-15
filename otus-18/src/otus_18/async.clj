@@ -1,10 +1,9 @@
 (ns otus-18.async
-  (:require
-   [clojure.core.async
-    :as
-    a
-    :refer
-    [<! <!! >! >!! alts! chan close! go go-loop pipeline-async pipeline thread timeout]]))
+  (:require [clojure.core.async :as a :refer [<! <!! >! >!!
+                                              alts! chan close!
+                                              go go-loop
+                                              pipeline-async pipeline
+                                              thread timeout]]))
 
 ;; Всем ли хорошо видно?
 
@@ -24,6 +23,7 @@
 (>!! echo-buffer :world)
 ; => true
 (>!! echo-buffer :!)
+
 ; Третий вызов будет блокирующим, т.к. буфер переполнен
 
 ;; Note: `sliding-buffer` - при переполнении старые данные будут удаляться из буфера
@@ -53,8 +53,8 @@
             (>! ch n)))
         (doseq [_ (range 9)]
           (<!! ch))))
-; => "Elapsed time: 2016.62955 msecs"
 
+; => "Elapsed time: 2016.62955 msecs"
 
 (def another-echo-chan (chan))
 (thread (println (<!! another-echo-chan)))
@@ -63,7 +63,6 @@
 ; => hi
 
 ;; * alts!
-
 
 (def ch-a (chan))
 (def ch-b (chan))

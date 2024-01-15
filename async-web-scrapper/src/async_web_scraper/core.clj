@@ -9,7 +9,6 @@
 (defn async-request [opts]
   (thread (http/request opts)))
 
-
 (defn request-page [base-url href]
   (go (-> (<! (async-request {:url (str base-url href)
                               :method :get}))
@@ -77,7 +76,6 @@
     ;; extract data from articles pages
     (pipeline 4 out-c (map extract-data) article-page-c)
 
-
     (go (let [entry-page (<! (request-page base-url entrypoint))]
           (doseq [href (take limit-pages (extract-pagination-hrefs entry-page))]
             (>! flow-href-c href))
@@ -110,5 +108,6 @@
   (<!! ch)
 
   (count (<!! (async/into [] ch)))
+
   ;; => 114
   )
