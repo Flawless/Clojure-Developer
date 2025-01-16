@@ -1,10 +1,12 @@
 (ns async-web-scraper.core
-  (:require [clj-http.client :as http]
-            [clojure.core.async
-             :as async
-             :refer [<! <!! >! chan close! go pipeline pipeline-async thread]]
-            [clojure.string :as str])
-  (:import (org.jsoup Jsoup)))
+  (:require
+   [clj-http.client :as http]
+   [clojure.core.async
+    :as async
+    :refer [<! <!! >! chan close! go pipeline pipeline-async thread]]
+   [clojure.string :as str])
+  (:import
+   (org.jsoup Jsoup)))
 
 (defn async-request [opts]
   (thread (http/request opts)))
@@ -18,25 +20,25 @@
 (defn extract-pagination-hrefs [page]
   (let [external? (fn [ref] (str/includes? ref "https://"))]
     (-> page
-        (.select "div[class^=paginator] > a[class^=link]")
+        (.select "div[class^=_paginator] > a[class^=_link]")
         (->> (map #(.attr % "href"))
              (remove external?)))))
 
 (defn extract-articles-hrefs [page]
   (let [external? (fn [ref] (str/includes? ref "https://"))]
     (-> page
-        (.select "div[class^=card] a[class^=link]")
+        (.select "div[class^=_card] a[class^=_link]")
         (->> (map #(.attr % "href"))
              (remove external?)))))
 
 (defn extract-data [page]
   (let [author (-> page
-                   (.select "div[class^=coAuthor] a p")
+                   (.select "div[class^=_author] a p")
                    (.text))
         title (-> (.select page "title")
                   .text)
         text (-> page
-                 (.select "div[class^=articleView] p")
+                 (.select "div[class^=_articleView] p")
                  (->> (map #(.text %))
                       (str/join "\n")))
         words-count (count (str/split text #"\s+"))]
@@ -86,7 +88,7 @@
 (comment
   (def flow-page
     (<!! (request-page "https://journal.tinkoff.ru"
-                       "/flows/readers-travel/")))
+                       "/flows/realty/")))
 
   (def article-page
     (<!! (request-page "https://journal.tinkoff.ru"
