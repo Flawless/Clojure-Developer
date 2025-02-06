@@ -1,5 +1,6 @@
 (ns otus-24.core
-  (:require [datascript.core :as d]))
+  (:require
+   [datascript.core :as d]))
 
 ;; * Basic queries
 
@@ -12,7 +13,7 @@
    [:s/heal :spell/name     "Heal"]
    [:s/heal :spell/manacost 200]
 
-   [:m/david :mage/name   "David"]
+   [:m/david :mage/name   "Fedor"]
    [:m/david :mage/age    25]
 
    [:m/john  :mage/name   "John"]
@@ -26,24 +27,28 @@
 
 ;; простейший запрос к данным
 (d/q '[:find ?name                    ; `?name` - pattern variable
-       :where [_ :mage/name ?name]]   ; `_` - игнорирование значения
+       :where [_ :mage/name ?name]]   ; `_` игнорирует значения
      ;; в качестве источников данных можно использовать нативные структуры
      mages)
+;; SELECT mage_name FROM mages;
 
 ;; вытаскиваем пары id -> name
 (d/q '[:find ?e ?name
        :where [?e :mage/name ?name]]
      mages)
+;; SELECT id, mage_name FROM mages;
 
 ;; запрос id по имени
 (d/q '[:find ?e .                     ; `.` в конце означает, что мы ожидаем одно значение
        :where [?e :mage/name "John"]]
      mages)
+;; SELECT id FROM mages WHERE mage_name = 'John';
 
 (d/q '[:find ?e .
        :in $ ?name                    ; передаем параметры в запрос снаружи
        :where [?e :mage/name ?name]]
      mages "John")
+;; SELECT id FROM mages WHERE mage_name = ?;
 
 ;; `?e` принимает одно и тоже значение во всех условиях внутри запроса
 (d/q '[:find ?age .
@@ -51,12 +56,22 @@
        [?e :mage/name "John"]
        [?e :mage/age ?age]]
      mages)
+;; SELECT mage_age FROM mages WHERE mage_name = 'John';
 
 ;; Задача. Получить список заклинаний выборанного мага по имени
 
 (d/q '[:find ?spell
-       :where]
+       :where
+       [?e :spell/name ?spell]
+       ;;???
+       ]
      mages)
+
+;; SELECT s.spell_name
+;; FROM mages m
+;; JOIN mage_spells ms ON m.id = ms.mage_id
+;; JOIN spells s ON ms.spell_id = s.id
+;; WHERE m.mage_name = 'John';
 
 ;; Предикаты внутри запроса
 
@@ -66,6 +81,7 @@
        [?e :mage/age ?age]
        [(> ?age 100)]]                  ; запрашиваем всех, кто старше 100 лет
      mages)
+;; SELECT mage_name FROM mages WHERE mage_age > 100;
 
 (d/q '[:find ?name ?centuries
        :where
@@ -74,6 +90,8 @@
        [(/ ?age 100) ?hths]             ; делим возраст на сто и связываем результат с промежуточной переменной `?hths`
        [(clojure.core/int ?hths) ?centuries]] ; округляем вниз и связываем с `?centuries`
      mages)
+;; SELECT mage_name, FLOOR(mage_age / 100) AS centuries
+;; FROM mages;
 
 ;; * Transactions
 
@@ -81,7 +99,7 @@
 (def conn (d/create-conn))
 
 ;; Можно передать данные для записи в базу ввиде мап
-(d/transact! conn [{:mage/name "David"
+(d/transact! conn [{:mage/name "Fedor"
                     :mage/age 25}
                    {:mage/name "John"
                     :mage/age 40}
@@ -91,155 +109,158 @@
 ;; Определим схему базы данных и создадим новую базу с данной схемой
 ;; Для DataScript схема не обязательна в отличие от Datomic
 (def schema
-  {:mage/name        {:db/cardinality :db.cardinality/one
-                      :db/unique :db.unique/identity
-                      :db/doc "A mage's name"}
-   :mage/age         {:db/cardinality :db.cardinality/one}
-   :mage/spells      {:db/valueType :db.type/ref
-                      :db/cardinality :db.cardinality/many
-                      :db/doc "Spellbook, cons"}
-   :spell/name       {:db/cardinality :db.cardinality/one
-                      :db/unique :db.unique/identity}
-   :spell/manacost   {:db/cardinality :db.cardinality/one}})
+  {:mage/name          {:db/cardinality :db.cardinality/one
+                        :db/unique :db.unique/identity
+                        :db/doc "A mage's name"}
+   :mage/age           {:db/cardinality :db.cardinality/one}
+   :mage/spells        {:db/valueType :db.type/ref
+                        :db/cardinality :db.cardinality/many
+                        :db/doc "Spellbook, cons"}
+   :spell/name         {:db/cardinality :db.cardinality/one
+                        :db/unique :db.unique/identity}
+   :spell/manacost     {:db/cardinality :db.cardinality/one}
+   :spell/prerequisite {:db/valueType   :db.type/ref
+                        :db/cardinality :db.cardinality/one
+                        :db/doc         "Prerequisite spell"}})
 
 (def conn (d/create-conn schema))
 
 ;; Запишем новые данные
-(d/transact! conn [{:mage/name "David"
-                    :mage/age 25}
-                   {:mage/name "John"
-                    :mage/age 75
-                    :db/id "john"}
-                   {:mage/name "Ivan"
-                    :mage/age 200}
+(d/transact! conn
+             [;; Mages
+              {:mage/name "Fedor" :mage/age 25}
+              {:mage/name "John"  :mage/age 75 :db/id "john"}
+              {:mage/name "Ivan"  :mage/age 200}
 
-                   {:spell/name "Fireball"
-                    :spell/manacost 100
-                    :db/id "fb"}
+              ;; Spells. Here "Frostbolt" requires "Fireball".
+              {:spell/name "Fireball"  :spell/manacost 100 :db/id "fb"}
+              {:spell/name "Frostbolt" :spell/manacost 100 :spell/prerequisite "fb" :db/id "fsb"}
+              {:spell/name "Heal"      :spell/manacost 200 :db/id "heal"}
 
-                   {:spell/name "Frostbolt"
-                    :spell/manacost 100
-                    :db/id "fsb"}
-
-                   ;; другой вариант сохранения информации о фактах в БД
-                   [:db/add "john" :mage/spells "fb"]
-                   [:db/add "john" :mage/spells "fsb"]])
+              ;; Fact: John directly knows only "Fireball".
+              [:db/add "john" :mage/spells "fb"]
+              ;; Ivan directly knows "Heal".
+              [:db/add "ivan" :mage/spells "heal"]])
 
 (d/q '[:find [?spell ...]
        :in $ ?mage
        :where
        [?e :mage/name ?mage]
        [?e :mage/spells ?s]
-       [?s :spell/name ?spell]
-       ;; дополнить запрос
-       ]
+       [?s :spell/name ?spell]]
      (d/db conn) "John")
 
 (d/transact! conn [[:db/retract [:mage/name "John"] :mage/spells [:spell/name "Fireball"]]]) ;; факт о том, что какие-то данные были удалены
 
-;; * Advanced queries. Pulls and Aggregates
-;; like SELECT *
+;; * Pulls and Aggregates
 (d/pull (d/db conn)                     ; db
         '[*]                            ; pull pattern
         [:mage/name "John"])            ; entity
-
 ;; аналогичный запрос
 (d/q '[:find (pull ?e [*])
        :where
        [?e :mage/name "John"]]
      (d/db conn))
+;; SELECT * FROM mages WHERE mage_name = 'John';
 
 ;; Ограничить выборку конкретных полей
 (d/pull (d/db conn) '[:db/id :mage/age :mage/spells] [:mage/name "John"])
+;; SELECT m.id, m.mage_age,
+;; (SELECT array_agg(s.spell_name)
+;; FROM mage_spells ms JOIN spells s ON ms.spell_id = s.id
+;; WHERE ms.mage_id = m.id) AS mage_spells
+;; FROM mages m
+;; WHERE m.mage_name = 'John';
 
 ;; Вложенные атрибуты
 (d/pull (d/db conn) '[:db/id :mage/age {:mage/spells [:spell/name]}] [:mage/name "John"])
+;; SELECT m.id, m.mage_age, s.spell_name
+;; FROM mages m
+;; LEFT JOIN mage_spells ms ON m.id = ms.mage_id
+;; LEFT JOIN spells s ON ms.spell_id = s.id
+;; WHERE m.mage_name = 'John';
 
 ;; Комбинируем с `*`
 (d/pull (d/db conn) '[* {:mage/spells [*]}] [:mage/name "John"])
+;; SELECT m., s.*
+;; FROM mages m
+;; LEFT JOIN mage_spells ms ON m.id = ms.mage_id
+;; LEFT JOIN spells s ON ms.spell_id = s.id
+;; WHERE m.mage_name = 'John';
 
 ;; Reverse lookups
 (d/pull (d/db conn) '[{:mage/_spells [:mage/name]}] [:spell/name "Fireball"])
+;; SELECT m.mage_name
+;; FROM mages m
+;; JOIN mage_spells ms ON m.id = ms.mage_id
+;; JOIN spells s ON ms.spell_id = s.id
+;; WHERE s.spell_name = 'Fireball';
 
 ;; Рекурсинвые запросы
-(def schema-with-recursion
-  (merge schema {:mage/apprentices {:db/valueType :db.type/ref
-                                    :db/cardinality :db.cardinality/many}}))
+(def schema
+  {:mage/name         {:db/cardinality :db.cardinality/one
+                       :db/unique      :db.unique/identity
+                       :db/doc         "A mage's name"}
+   :mage/age          {:db/cardinality :db.cardinality/one}
+   :mage/spells       {:db/valueType   :db.type/ref
+                       :db/cardinality :db.cardinality/many
+                       :db/doc         "Spells known by the mage"}
+   :spell/name        {:db/cardinality :db.cardinality/one
+                       :db/unique      :db.unique/identity}
+   :spell/manacost    {:db/cardinality :db.cardinality/one}
+   :spell/prerequisite {:db/valueType   :db.type/ref
+                        :db/cardinality :db.cardinality/one
+                        :db/doc         "Prerequisite spell"}})
 
-(def conn (d/create-conn schema-with-recursion))
+(def conn (d/create-conn schema))
+(d/transact! conn
+             [{:mage/name "Fedor" :mage/age 25}
+              {:mage/name "John"  :mage/age 75 :db/id "john"}
+              {:mage/name "Ivan"  :mage/age 200}
 
-(d/transact! conn [{:mage/name "David"
-                    :mage/age 25
-                    :db/id "davi"}
-                   {:mage/name "John"
-                    :mage/age 75
-                    :db/id "john"}
-                   {:mage/name "Ivan"
-                    :mage/age 200
-                    :db/id "ivan"}
+              {:spell/name "Fireball"  :spell/manacost 100 :db/id "fb"}
+              {:spell/name "Frostbolt" :spell/manacost 100 :spell/prerequisite "fb" :db/id "fsb"}
+              {:spell/name "Heal"      :spell/manacost 200 :db/id "heal"}
 
-                   {:spell/name "Fireball"
-                    :spell/manacost 100
-                    :db/id "fb"}
+              [:db/add "john" :mage/spells "fb"]
+              [:db/add "ivan" :mage/spells "heal"]])
 
-                   {:spell/name "Frostbolt"
-                    :spell/manacost 100
-                    :db/id "fsb"}
+(def can-cast-rules
+  '[;; Правило 1: прямой доступ — если маг имеет заклинание в своём списке.
+    [(can-cast ?mage ?spell)
+     [?mage :mage/spells ?spell]]
 
-                   {:spell/name "Heal"
-                    :spell/manacost 200
-                    :db/id "heal"}
+    ;; Правило 2: рекурсивное правило — если маг знает промежуточное заклинание,
+    ;; а другое заклинание требует наличие этого заклинания в качестве пререквизита.
+    [(can-cast ?mage ?spell)
+     [?mage :mage/spells ?intermediate-spell]
+     [?spell :spell/prerequisite ?intermediate-spell]
+     (can-cast ?mage ?intermediate-spell)]])
 
-                   [:db/add "john" :mage/spells "fb"]
-                   [:db/add "john" :mage/spells "fsb"]
-                   [:db/add "ivan" :mage/spells "heal"]
-
-                   [:db/add "ivan" :mage/apprentices "john"]
-                   [:db/add "john" :mage/apprentices "davi"]])
-
-(d/pull (d/db conn) '[:mage/name :mage/age {:mage/apprentices ...}] [:mage/name "Ivan"])
- ;; =>
- ;; {:mage/age 200
- ;;  :mage/apprentices [{:mage/age 40
- ;;                      :mage/apprentices [{:mage/age 25
- ;;                                          :mage/name "David"}]
- ;;                      :mage/name "John"}]
- ;;  :mage/name "Ivan"}
-
-;; aggregate fns
-;; single values (e.g. `max`, `min`, `sum`, `avg`, `count`)
-;; colls (e.g. `(distinct ?xs)` `(min n ?xs)` `(max n ?xs)` `(rand n ?xs)` `(sample n ?xs)`)
-;; средний возраст
-(-> (d/q '[:find (avg ?age) .
-           :where [_ :mage/age ?age]]
-         (d/db conn))
-    int)
-
-;; количество заклинаний у каждого мага
-(d/q '[:find ?mage (count ?spell)
+(d/q '[:find [?spell-name ...]
+       :in $ % ?mage-name
        :where
-       [?e :mage/name ?mage]
-       [?e :mage/spells ?spell]]
-     (d/db conn))
-
-;; * Advanced queries. Rules
-
-(d/q '[:find ?mage
-       :in $ %
-       :where
-       (skilled-mage ?e)
-       [?e :mage/name ?mage]]
+       [?m :mage/name ?mage-name]
+       (can-cast ?m ?s)
+       [?s :spell/name ?spell-name]]
      (d/db conn)
-     '[[(skilled-mage ?e)
-        [?e :mage/spells]]])
+     can-cast-rules
+     "John")
 
-(d/q '[:find ?mage .
-       :in $ % ?spell
-       :where
-       (mage-knows-spell ?mage ?spell)]
-     (d/db conn)
-     '[[(mage-knows-spell ?mage ?spell)
-        [?e :mage/name ?mage]
-        [?s :spell/name ?spell]
-        [?e :mage/spells ?s]]]
-     "Heal")
+;; SQL аналог с CTE (Common Table Expression):
+;;
+;; WITH RECURSIVE can_cast(mage_id, spell_id) AS (
+;;   SELECT mage_id, spell_id
+;;   FROM mage_spells
+;;   WHERE mage_id = (SELECT id FROM mages WHERE mage_name = 'John')
+;;
+;;   UNION ALL
+;;
+;;   SELECT cc.mage_id, s.id
+;;   FROM can_cast cc
+;;   JOIN spells s ON cc.spell_id = s.prerequisite
+;; )
+;; SELECT m.mage_name, s.spell_name
+;; FROM can_cast cc
+;; JOIN mages m ON cc.mage_id = m.id
+;; JOIN spells s ON cc.spell_id = s.id;
